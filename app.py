@@ -4,7 +4,7 @@ import json
 import pandas as pd
 import numpy as np
 st.set_page_config(layout="wide")
-st.title(':green[Shopify ] :blue[product scaper]')
+st.title(':green[Shopify ] :blue[product scraper]')
 url=st.text_input('',placeholder='Enter the URL of JSON page of shopify store ....',)
 product_id=[]
 handle=[]
