@@ -32,7 +32,13 @@ images_position=[]
 images_widhth=[]
 images_height=[]
 option_product_id=[]
-
+product_id_options = []
+option1_name = []
+option1_value = []
+option2_name = []
+option2_value = []
+option3_name = []
+option3_value = []
 
 def fetch_product(url):
     try:
@@ -73,45 +79,61 @@ def fetch_product(url):
             new_tags.append(','.join(i))
         data_general['Tags'] = new_tags
 
-
         data_images = pd.DataFrame()
         for i in json_data['products']:
-            for j in i['images']:
-                images_product_id.append(j['product_id'])
-                img_src.append(j['src'])
-                images_position.append(j['position'])
+            for i in json_data['products']:
+                if len(i['images']) > 0:
+                    for j in i['images']:
+                        images_product_id.append(j['product_id'])
+                        img_src.append(j['src'])
+                        images_position.append(j['position'])
+                else:
+                    images_product_id.append(i['id'])
+                    img_src.append('')
+                    images_position.append('')
+
         data_images['product_id'] = images_product_id
         data_images['Image Src'] = img_src
         data_images['Image Position'] = images_position
 
-        option_name_dict = {}
-        option_value_dict = {}
 
-        # Iterate over the JSON data and dynamically create lists
+        # Extract data from JSON into lists
         for product in json_data['products']:
-            for count, option in enumerate(product['options'], start=1):
-                option_name_key = f'Option{count} Name'
-                option_value_key = f'Option{count} Value'
+            product_id_options.append(product['id'])
 
-                # Initialize lists if they do not exist in the dictionary
-                if option_name_key not in option_name_dict:
-                    option_name_dict[option_name_key] = []
-                if option_value_key not in option_value_dict:
-                    option_value_dict[option_value_key] = []
+            option1_name.append(product['options'][0]['name'])
+            option1_value.append(product['options'][0]['values'])
 
-                # Fill the lists with the option names and values
-                for value in option['values']:
-                    option_product_id.append(product['id'])
-                    option_name_dict[option_name_key].append(option['name'])
-                    option_value_dict[option_value_key].append(value)
+            if len(product['options']) > 1:
+                option2_name.append(product['options'][1]['name'])
+                option2_value.append(product['options'][1]['values'])
+            else:
+                option2_name.append(None)
+                option2_value.append(None)
 
-        # Combine the dictionaries
-        combined_dict = {**option_name_dict, **option_value_dict}
+            if len(product['options']) > 2:
+                option3_name.append(product['options'][2]['name'])
+                option3_value.append(product['options'][2]['values'])
+            else:
+                option3_name.append(None)
+                option3_value.append(None)
 
-        # Convert to DataFrame
+        # Create DataFrame
+        data_options = pd.DataFrame({
+            'product_id': product_id_options,
+            'Option1 Name': option1_name,
+            'Option1 Value': option1_value,
+            'Option2 Name': option2_name,
+            'Option2 Value': option2_value,
+            'Option3 Name': option3_name,
+            'Option3 Value': option3_value,
+        })
 
-        data_options = pd.DataFrame.from_dict(combined_dict, orient='index').transpose()
-        data_options['product_id'] = option_product_id
+        # Explode the lists in Option Value columns into separate rows
+        data_options = data_options.explode('Option1 Value').explode('Option2 Value').explode('Option3 Value')
+
+        # Reset index
+        data_options.reset_index(drop=True, inplace=True)
 
         dfs = [data_general, data_options, data_images]
 
@@ -127,8 +149,7 @@ def fetch_product(url):
 
         merged_df.loc[
             merged_df.duplicated(subset=['Handle'], keep='first'), ['Title', 'Body (HTML)', 'Vendor', 'Type', 'Tags',
-                                                                    'Published', option_name_key]] = ''
-
+                                                                    'Published', 'Option1 Name', 'Option2 Name' ,'Option3 Name']] = ''
         def replace_duplicates_with_null(lst):
             unique_values = []
             new_list = []
@@ -140,12 +161,18 @@ def fetch_product(url):
             new_list += [np.nan] * (len(lst) - len(new_list))
             return new_list
 
-        merged_df[option_value_key] = merged_df.groupby('Handle')[option_value_key].transform(
+        merged_df['Option1 Value'] = merged_df.groupby('Handle')['Option1 Value'].transform(
             replace_duplicates_with_null)
+        merged_df['Option2 Value'] = merged_df.groupby('Handle')['Option2 Value'].transform(
+            replace_duplicates_with_null)
+        merged_df['Option3 Value'] = merged_df.groupby('Handle')['Option3 Value'].transform(
+            replace_duplicates_with_null)
+
         merged_df['Image Src'] = merged_df.groupby('Handle')['Image Src'].transform(replace_duplicates_with_null)
         merged_df['Image Position'] = merged_df.groupby('Handle')['Image Position'].transform(
             replace_duplicates_with_null)
-        merged_df.dropna(subset=[option_value_key, 'Image Src'], how='all', inplace=True)
+
+        merged_df.dropna(subset=['Option1 Value','Option2 Value', 'Option3 Value', 'Image Src'], how='all', inplace=True)
 
         return merged_df
 
@@ -157,4 +184,4 @@ def fetch_product(url):
 if url:
      df=fetch_product(url)
      st.download_button('Download csv file', df.to_csv(), mime='text/csv')
-     st.dataframe(df,use_container_width=True,selection_mode='multi-row', height=1000)
+     st.dataframe(df.reset_index(drop=True),use_container_width=True,selection_mode='multi-row', height=1000)
